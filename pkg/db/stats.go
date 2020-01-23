@@ -10,11 +10,12 @@ import (
 )
 
 type Status struct {
-	Plan          string     `json:"plan"`
-	NextRun       time.Time  `json:"next_run"`
-	LastRun       *time.Time `json:"last_run,omitempty"`
-	LastRunStatus string     `json:"last_run_status,omitempty"`
-	LastRunLog    string     `json:"last_run_log,omitempty"`
+	Plan               string     `json:"plan"`
+	NextRun            time.Time  `json:"next_run"`
+	LastRun            *time.Time `json:"last_run,omitempty"`
+	LastRunStatus      string     `json:"last_run_status,omitempty"`
+	LastRunLog         string     `json:"last_run_log,omitempty"`
+	LastOplogTimestamp string     `json:"last_oplog_timestamp"`
 }
 
 type StatusStore struct {
@@ -150,4 +151,25 @@ func (db *StatusStore) GetAll() ([]*Status, error) {
 	}
 
 	return stats, nil
+}
+
+// Get loads specific job stats from db
+func (db *StatusStore) Get(plan string) (*Status, error) {
+	var status Status
+	err := db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket(db.bucket)
+		v := b.Get([]byte(plan))
+
+		err := json.Unmarshal(v, &status)
+		if err != nil {
+			return errors.Wrap(err, "Status store json unmarshal failed")
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &status, nil
 }

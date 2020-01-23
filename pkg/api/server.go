@@ -40,11 +40,6 @@ func (s *HttpServer) Start(version string) {
 		r.Get("/{planID}", getPlanStatus)
 	})
 
-	r.Route("/backup", func(r chi.Router) {
-		r.Use(configCtx(*s.Config))
-		r.Post("/{planID}", postBackup)
-	})
-
 	FileServer(r, "/storage", http.Dir(s.Config.StoragePath))
 
 	log.Error(http.ListenAndServe(fmt.Sprintf(":%v", s.Config.Port), r))

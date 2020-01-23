@@ -13,8 +13,11 @@ import (
 	"github.com/stefanprodan/mgob/pkg/config"
 )
 
-func dump(plan config.Plan, tmpPath string, ts time.Time) (string, string, error) {
+func dump(plan config.Plan, tmpPath string, ts time.Time, lastOplogTimestamp string) (string, string, error) {
 	archive := fmt.Sprintf("%v/%v-%v.gz", tmpPath, plan.Name, ts.Unix())
+	if plan.Target.Oplog {
+		archive = fmt.Sprintf("%v/%v-%v-oplog.gz", tmpPath, plan.Name, ts.Unix())
+	}
 	mlog := fmt.Sprintf("%v/%v-%v.log", tmpPath, plan.Name, ts.Unix())
 	dump := fmt.Sprintf("mongodump --archive=%v --gzip ", archive)
 
@@ -32,7 +35,15 @@ func dump(plan config.Plan, tmpPath string, ts time.Time) (string, string, error
 		}
 	}
 
-	if plan.Target.Database != "" {
+	if plan.Target.Oplog && lastOplogTimestamp != "" {
+		dump += "-d local -c oplog.rs " + "--query '{ \"ts\" : { $gt :  " + lastOplogTimestamp + " } }'"
+	}
+
+	if plan.Target.Oplog && lastOplogTimestamp == "" {
+		dump += "--oplog "
+	}
+
+	if plan.Target.Database != "" && !plan.Target.Oplog {
 		dump += fmt.Sprintf("--db %v ", plan.Target.Database)
 	}
 

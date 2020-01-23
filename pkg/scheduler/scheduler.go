@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/dustin/go-humanize"
+	mdb "github.com/mongodb/mongo-tools-common/db"
 	"github.com/pkg/errors"
 	"github.com/robfig/cron"
 	log "github.com/sirupsen/logrus"
@@ -42,7 +43,17 @@ func (s *Scheduler) Start() error {
 		if err != nil {
 			return errors.Wrapf(err, "Invalid cron %v for plan %v", plan.Scheduler.Cron, plan.Name)
 		}
-		s.Cron.Schedule(schedule, backupJob{plan.Name, plan, s.Config, s.Stats, s.metrics, s.Cron})
+		sp, err := backup.InitSessionProvider(plan.Target.Username, plan.Target.Password, plan.Target.Host, plan.Target.Port)
+		if err != nil {
+			return errors.Wrapf(
+				err,
+				"Failed to init session provider for username=%s, password=*****, host=%s, port=%s",
+				plan.Target.Username,
+				plan.Target.Host,
+				plan.Target.Port,
+			)
+		}
+		s.Cron.Schedule(schedule, backupJob{plan.Name, plan, s.Config, s.Stats, s.metrics, s.Cron, sp})
 	}
 
 	s.Cron.AddFunc("0 0 */1 * *", func() {
@@ -72,12 +83,13 @@ func (s *Scheduler) Start() error {
 }
 
 type backupJob struct {
-	name    string
-	plan    config.Plan
-	conf    *config.AppConfig
-	stats   *db.StatusStore
-	metrics *metrics.BackupMetrics
-	cron    *cron.Cron
+	name            string
+	plan            config.Plan
+	conf            *config.AppConfig
+	stats           *db.StatusStore
+	metrics         *metrics.BackupMetrics
+	cron            *cron.Cron
+	sessionProvider *mdb.SessionProvider
 }
 
 func (b backupJob) Run() {
@@ -86,7 +98,18 @@ func (b backupJob) Run() {
 	var backupLog string
 	t1 := time.Now()
 
-	res, err := backup.Run(b.plan, b.conf.TmpPath, b.conf.StoragePath)
+	st, err := b.stats.Get(b.plan.Name)
+	if err != nil {
+		status = "500"
+		backupLog = fmt.Sprintf("Backup failed %v", err)
+		log.WithField("plan", b.plan.Name).Error(backupLog)
+
+		if err := notifier.SendNotification(fmt.Sprintf("%v backup failed", b.plan.Name),
+			err.Error(), true, b.plan); err != nil {
+			log.WithField("plan", b.plan.Name).Errorf("Notifier failed %v", err)
+		}
+	}
+	res, err := backup.Run(b.plan, b.conf.TmpPath, b.conf.StoragePath, st.LastOplogTimestamp, b.sessionProvider)
 	if err != nil {
 		status = "500"
 		backupLog = fmt.Sprintf("Backup failed %v", err)

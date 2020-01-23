@@ -30,6 +30,7 @@ type Target struct {
 	Port     int    `yaml:"port"`
 	Username string `yaml:"username"`
 	Params   string `yaml:"params"`
+	Oplog    bool   `yaml:"oplog"`
 }
 
 type Scheduler struct {

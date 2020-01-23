@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/mongodb/mongo-tools-common/db"
+
 	"github.com/codeskyblue/go-sh"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -13,11 +15,11 @@ import (
 	"github.com/stefanprodan/mgob/pkg/config"
 )
 
-func Run(plan config.Plan, tmpPath string, storagePath string) (Result, error) {
+func Run(plan config.Plan, tmpPath string, storagePath, oplogTimestamp string, sess *db.SessionProvider) (Result, error) {
 	t1 := time.Now()
 	planDir := fmt.Sprintf("%v/%v", storagePath, plan.Name)
 
-	archive, mlog, err := dump(plan, tmpPath, t1.UTC())
+	archive, mlog, err := dump(plan, tmpPath, t1.UTC(), oplogTimestamp)
 	log.WithFields(log.Fields{
 		"archive": archive,
 		"mlog":    mlog,
@@ -34,6 +36,14 @@ func Run(plan config.Plan, tmpPath string, storagePath string) (Result, error) {
 
 	if err != nil {
 		return res, err
+	}
+
+	if plan.Target.Oplog {
+		ts, err := getCurrentOplogTime(sess)
+		if err != nil {
+			return res, errors.Wrapf(err, "getting current oplog timestamp from mongo")
+		}
+		res.OplogTimestamp = fmt.Sprintf("Timestamp(%d, %d)", ts.T, ts.I)
 	}
 
 	err = sh.Command("mkdir", "-p", planDir).Run()

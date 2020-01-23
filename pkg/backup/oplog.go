@@ -1,0 +1,54 @@
+package backup
+
+import (
+	"fmt"
+	"strconv"
+
+	mdb "github.com/mongodb/mongo-tools-common/db"
+	"github.com/mongodb/mongo-tools-common/options"
+	"github.com/mongodb/mongo-tools/mongodump"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+)
+
+func InitSessionProvider(user, password, host string, port int) (*mdb.SessionProvider, error) {
+	opts := options.New(
+		"mongodump",
+		"built-without-version-string",
+		"built-without-git-commit",
+		"built-without-usage-string",
+		options.EnabledOptions{Auth: true, Connection: true, Namespace: true, URI: true},
+	)
+	if host != "" {
+		opts.Host = host
+	}
+	if port != 0 {
+		opts.Port = strconv.Itoa(port)
+	}
+	opts.Username = user
+	opts.Password = password
+	opts.Quiet = true
+	inputOpts := mongodump.InputOptions{}
+	opts.AddOptions(&inputOpts)
+	outputOpts := mongodump.OutputOptions{}
+	opts.AddOptions(&outputOpts)
+	opts.URI.AddKnownURIParameters(options.KnownURIOptionsReadPreference)
+	return mdb.NewSessionProvider(*opts)
+}
+
+// getCurrentOplogTime returns the most recent oplog entry's timestamp
+func getCurrentOplogTime(sess *mdb.SessionProvider) (primitive.Timestamp, error) {
+	mostRecentOplogEntry := mdb.Oplog{}
+	var tempBSON bson.Raw
+
+	err := sess.FindOne("local", "oplog.rs", 0, nil, &bson.M{"$natural": -1}, &tempBSON, 0)
+	if err != nil {
+		return primitive.Timestamp{}, fmt.Errorf("error getting recent oplog entry: %v", err)
+	}
+	err = bson.Unmarshal(tempBSON, &mostRecentOplogEntry)
+	if err != nil {
+		return primitive.Timestamp{}, err
+	}
+	return mostRecentOplogEntry.Timestamp, nil
+}
