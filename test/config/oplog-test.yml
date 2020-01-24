@@ -1,0 +1,15 @@
+scheduler:
+  cron: "* * * * *"
+  retention: 5
+  timeout: 60
+target:
+  host: "test-replicaset-mongodb"
+  port: 27017
+  database: test
+  oplog: true
+sftp:
+  host: "test-sftp"
+  port: 22
+  username: test
+  private_key: /etc/ssh/ssh_host_rsa_key
+  dir: backup

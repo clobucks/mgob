@@ -126,17 +126,24 @@ func start(c *cli.Context) error {
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Infof("%d plans found", len(plans))
 
 	store, err := db.Open(path.Join(appConfig.DataPath, "mgob.db"))
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Debug("opened database")
 	statusStore, err := db.NewStatusStore(store)
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Debug("created status store")
 	sch := scheduler.New(plans, appConfig, statusStore)
-	sch.Start()
+	err = sch.Start()
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Debug("started scheduler")
 
 	server := &api.HttpServer{
 		Config: appConfig,

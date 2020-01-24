@@ -47,7 +47,7 @@ func (s *Scheduler) Start() error {
 		if err != nil {
 			return errors.Wrapf(
 				err,
-				"Failed to init session provider for username=%s, password=*****, host=%s, port=%s",
+				"Failed to init session provider for username=%s, password=*****, host=%s, port=%d",
 				plan.Target.Username,
 				plan.Target.Host,
 				plan.Target.Port,
@@ -138,10 +138,11 @@ func (b backupJob) Run() {
 	b.metrics.Latency.WithLabelValues(b.plan.Name, status).Observe(t2.Sub(t1).Seconds())
 
 	s := &db.Status{
-		LastRun:       &res.Timestamp,
-		LastRunStatus: status,
-		Plan:          b.plan.Name,
-		LastRunLog:    backupLog,
+		LastRun:            &res.Timestamp,
+		LastRunStatus:      status,
+		Plan:               b.plan.Name,
+		LastRunLog:         backupLog,
+		LastOplogTimestamp: res.OplogTimestamp,
 	}
 
 	for _, e := range b.cron.Entries() {

@@ -15,7 +15,7 @@ type Status struct {
 	LastRun            *time.Time `json:"last_run,omitempty"`
 	LastRunStatus      string     `json:"last_run_status,omitempty"`
 	LastRunLog         string     `json:"last_run_log,omitempty"`
-	LastOplogTimestamp string     `json:"last_oplog_timestamp"`
+	LastOplogTimestamp string     `json:"last_oplog_timestamp,omitempty"`
 }
 
 type StatusStore struct {

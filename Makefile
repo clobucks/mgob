@@ -4,7 +4,7 @@ APP_VERSION?=1.1
 
 # build vars
 BUILD_DATE:=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
-REPOSITORY:=stefanprodan
+REPOSITORY:=clobucks
 
 #run vars
 CONFIG:=$$(pwd)/test/config
@@ -55,27 +55,56 @@ release:
 	@docker push $(REPOSITORY)/mgob:latest
 
 run:
+	@docker network create mgob || true
 	@echo ">>> Starting mgob container"
-	@docker run -dp 8090:8090 --name mgob-$(APP_VERSION) \
+	docker run -dp 8090:8090 --net=mgob --name mgob-$(APP_VERSION) \
 	    --restart unless-stopped \
 	    -v "$(CONFIG):/config" \
         $(REPOSITORY)/mgob:$(APP_VERSION) \
 		-ConfigPath=/config \
 		-StoragePath=/storage \
 		-TmpPath=/tmp \
-		-LogLevel=info
+		-LogLevel=debug
 
 backend:
-	@docker run -dp 20022:22 --name mgob-sftp \
+	@docker network create mgob || true
+	@docker run -dp 20022:22 --net=mgob --name mgob-sftp \
 	    atmoz/sftp:alpine test:test:::backup
-	@docker run -dp 20099:9000 --name mgob-s3 \
+	@docker run -dp 20099:9000 --net=mgob --name mgob-s3 \
 	    -e "MINIO_ACCESS_KEY=AKIAIOSFODNN7EXAMPLE" \
 	    -e "MINIO_SECRET_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" \
 	    minio/minio server /export
+	@sleep 2
 	@mc config host add local http://localhost:20099 \
 	    AKIAIOSFODNN7EXAMPLE wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY S3v4
-	@sleep 5
 	@mc mb local/backup
+	@ssh-keygen -b 4096 -t rsa -N "" -f /tmp/ssh_host_rsa_key -q
+	@docker run -dp 20023:22 --net=mgob \
+        -v /tmp/ssh_host_rsa_key.pub:/home/test/.ssh/keys/ssh_host_rsa_key.pub:ro \
+        -v /tmp/ssh_host_rsa_key:/etc/ssh/ssh_host_rsa_key \
+        --name test-sftp atmoz/sftp:alpine test::1001::backup
+
+MONGO_PORT=27017
+MONGO_REPLICA_PORT=27018
+MONGO_CONTAINER=test-mongodb
+MONGO_REPLICA_CONTAINER=test-replicaset-mongodb
+
+mongo:
+	@docker network create mgob || true
+	@docker run -dp $(MONGO_PORT):27017 --net=mgob --name $(MONGO_CONTAINER) mongo:4.0.14
+	@sleep 3
+	@mongo test --eval 'db.test.insert({item: "item", val: "test" });'
+	@docker run -dp $(MONGO_REPLICA_PORT):27017 --net=mgob --name $(MONGO_REPLICA_CONTAINER) mongo:4.0.14 mongod --replSet test-set
+	@docker cp ./test/init_replica_set.js test-replicaset-mongodb:/init_replica_set.js
+	@sleep 3
+	@docker exec $(MONGO_REPLICA_CONTAINER) mongo localhost:27017/admin /init_replica_set.js
+	@sleep 2
+	@@mongo --port $(MONGO_REPLICA_PORT) test --eval 'db.test.insert({item: "item", val: "test" });'
+
+cleanup:
+	@docker rm -f test-mongodb test-sftp mgob-s3 mgob-sftp test-replicaset-mongodb || true
+	@rm -rf /tmp/ssh_host_rsa_key /tmp/ssh_host_rsa_key.pub
+	@docker network rm mgob
 
 fmt:
 	@echo ">>> Running go fmt $(PACKAGES)"
