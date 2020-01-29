@@ -1,6 +1,6 @@
 SHELL:=/bin/bash
 
-APP_VERSION?=1.1
+APP_VERSION?=1.1.1
 
 # build vars
 BUILD_DATE:=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -56,10 +56,13 @@ release:
 
 run:
 	@docker network create mgob || true
+	@docker rm -f mgob-$(APP_VERSION) || true
 	@echo ">>> Starting mgob container"
 	docker run -dp 8090:8090 --net=mgob --name mgob-$(APP_VERSION) \
 	    --restart unless-stopped \
 	    -v "$(CONFIG):/config" \
+	    -v /tmp/ssh_host_rsa_key.pub:/home/test/.ssh/keys/ssh_host_rsa_key.pub:ro \
+		-v /tmp/ssh_host_rsa_key:/etc/ssh/ssh_host_rsa_key \
         $(REPOSITORY)/mgob:$(APP_VERSION) \
 		-ConfigPath=/config \
 		-StoragePath=/storage \
@@ -102,7 +105,7 @@ mongo:
 	@@mongo --port $(MONGO_REPLICA_PORT) test --eval 'db.test.insert({item: "item", val: "test" });'
 
 cleanup:
-	@docker rm -f test-mongodb test-sftp mgob-s3 mgob-sftp test-replicaset-mongodb || true
+	@docker rm -f test-mongodb test-sftp mgob-s3 mgob-sftp test-replicaset-mongodb mgob-$(APP_VERSION) || true
 	@rm -rf /tmp/ssh_host_rsa_key /tmp/ssh_host_rsa_key.pub
 	@docker network rm mgob
 

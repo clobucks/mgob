@@ -20,20 +20,30 @@ func InitSessionProvider(user, password, host string, port int) (*mdb.SessionPro
 		"built-without-usage-string",
 		options.EnabledOptions{Auth: true, Connection: true, Namespace: true, URI: true},
 	)
-	if host != "" {
-		opts.Host = host
-	}
-	if port != 0 {
-		opts.Port = strconv.Itoa(port)
-	}
-	opts.Username = user
-	opts.Password = password
 	opts.Quiet = true
 	inputOpts := mongodump.InputOptions{}
 	opts.AddOptions(&inputOpts)
 	outputOpts := mongodump.OutputOptions{}
 	opts.AddOptions(&outputOpts)
 	opts.URI.AddKnownURIParameters(options.KnownURIOptionsReadPreference)
+
+	var args []string
+
+	if host != "" {
+		args = append(args, "--host", host)
+	}
+	if port != 0 {
+		args = append(args, "--port", strconv.Itoa(port))
+	}
+	if user != "" {
+		args = append(args, "-u", user)
+	}
+	if password != "" {
+		args = append(args, "-p", password)
+	}
+	if _, err := opts.ParseArgs(args); err != nil {
+		return nil, fmt.Errorf("parsing args: %w", err)
+	}
 	return mdb.NewSessionProvider(*opts)
 }
 
@@ -44,7 +54,7 @@ func getCurrentOplogTime(sess *mdb.SessionProvider) (primitive.Timestamp, error)
 
 	err := sess.FindOne("local", "oplog.rs", 0, nil, &bson.M{"$natural": -1}, &tempBSON, 0)
 	if err != nil {
-		return primitive.Timestamp{}, fmt.Errorf("error getting recent oplog entry: %v", err)
+		return primitive.Timestamp{}, fmt.Errorf("error getting recent oplog entry: %w", err)
 	}
 	err = bson.Unmarshal(tempBSON, &mostRecentOplogEntry)
 	if err != nil {

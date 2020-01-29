@@ -23,14 +23,14 @@ type Plan struct {
 }
 
 type Target struct {
-	Database string `yaml:"database"`
-	Host     string `yaml:"host"`
-	Uri      string `yaml:"uri"`
-	Password string `yaml:"password"`
-	Port     int    `yaml:"port"`
-	Username string `yaml:"username"`
-	Params   string `yaml:"params"`
-	Oplog    bool   `yaml:"oplog"`
+	Database   string `yaml:"database"`
+	AuthSource string `yaml:"auth_source"`
+	Host       string `yaml:"host"`
+	Password   string `yaml:"password"`
+	Port       int    `yaml:"port"`
+	Username   string `yaml:"username"`
+	Params     string `yaml:"params"`
+	Oplog      bool   `yaml:"oplog"`
 }
 
 type Scheduler struct {

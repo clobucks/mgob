@@ -43,11 +43,15 @@ func (s *Scheduler) Start() error {
 		if err != nil {
 			return errors.Wrapf(err, "Invalid cron %v for plan %v", plan.Scheduler.Cron, plan.Name)
 		}
-		sp, err := backup.InitSessionProvider(plan.Target.Username, plan.Target.Password, plan.Target.Host, plan.Target.Port)
+
+		var sp *mdb.SessionProvider
+		sp, err = backup.InitSessionProvider(plan.Target.Username, plan.Target.Password, plan.Target.Host, plan.Target.Port)
+
 		if err != nil {
 			return errors.Wrapf(
 				err,
-				"Failed to init session provider for username=%s, password=*****, host=%s, port=%d",
+				"Failed to init session provider for plan=%s, username=%s, password=*****, host=%s, port=%d",
+				plan.Name,
 				plan.Target.Username,
 				plan.Target.Host,
 				plan.Target.Port,

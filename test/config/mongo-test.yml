@@ -9,7 +9,7 @@ scheduler:
   retention: 5
   timeout: 60
 s3:
-  url: "mgob-s3"
+  url: "http://mgob-s3:9000"
   bucket: "backup"
   accessKey: "AKIAIOSFODNN7EXAMPLE"
   secretKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"

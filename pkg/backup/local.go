@@ -21,22 +21,22 @@ func dump(plan config.Plan, tmpPath string, ts time.Time, lastOplogTimestamp str
 	mlog := fmt.Sprintf("%v/%v-%v.log", tmpPath, plan.Name, ts.Unix())
 	dump := fmt.Sprintf("mongodump --archive=%v --gzip ", archive)
 
-	if plan.Target.Uri != "" {
-		// using uri (New in version 3.4.6)
-		// host/port/username/password are incompatible with uri
-		// https://docs.mongodb.com/manual/reference/program/mongodump/#cmdoption-mongodump-uri
-		dump += fmt.Sprintf("--uri %v ", plan.Target.Uri)
-	} else {
-		// use older host/port
-		dump += fmt.Sprintf("--host %v --port %v ", plan.Target.Host, plan.Target.Port)
+	dump += fmt.Sprintf("--host %v --port %v ", plan.Target.Host, plan.Target.Port)
 
-		if plan.Target.Username != "" && plan.Target.Password != "" {
-			dump += fmt.Sprintf("-u %v -p %v ", plan.Target.Username, plan.Target.Password)
-		}
+	if plan.Target.Username != "" {
+		dump += fmt.Sprintf("-u %v ", plan.Target.Username)
+	}
+
+	if plan.Target.Password != "" {
+		dump += fmt.Sprintf("-p %v ", plan.Target.Password)
+	}
+
+	if plan.Target.AuthSource != "" {
+		dump += fmt.Sprintf("--authenticationDatabase %v ", plan.Target.AuthSource)
 	}
 
 	if plan.Target.Oplog && lastOplogTimestamp != "" {
-		dump += "-d local -c oplog.rs " + "--query '{ \"ts\" : { $gt :  " + lastOplogTimestamp + " } }'"
+		dump += `-d local -c oplog.rs " + "--query '{ "ts" : { $gt :  " + lastOplogTimestamp + " } }'`
 	}
 
 	if plan.Target.Oplog && lastOplogTimestamp == "" {

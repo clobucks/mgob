@@ -1,11 +1,12 @@
 scheduler:
   cron: "* * * * *"
   retention: 5
-  timeout: 60
 target:
   host: "test-replicaset-mongodb"
   port: 27017
-  database: test
+  username: test
+  password: secrets
+  auth_source: admin
   oplog: true
 sftp:
   host: "test-sftp"
