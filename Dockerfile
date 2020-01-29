@@ -70,4 +70,4 @@ COPY --from=0 /go/src/github.com/stefanprodan/mgob/mgob .
 
 VOLUME ["/config", "/storage", "/tmp", "/data"]
 
-ENTRYPOINT [ "./mgob" ]
+ENTRYPOINT [ "./mgob -l debug" ]

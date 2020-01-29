@@ -15,8 +15,11 @@ import (
 
 func dump(plan config.Plan, tmpPath string, ts time.Time, lastOplogTimestamp string) (string, string, error) {
 	archive := fmt.Sprintf("%v/%v-%v.gz", tmpPath, plan.Name, ts.Unix())
-	if plan.Target.Oplog {
-		archive = fmt.Sprintf("%v/%v-%v-oplog.gz", tmpPath, plan.Name, ts.Unix())
+	if plan.Target.Oplog && lastOplogTimestamp == "" {
+		archive = fmt.Sprintf("%v/%v-%v-initial-oplog.gz", tmpPath, plan.Name, ts.Unix())
+	}
+	if plan.Target.Oplog && lastOplogTimestamp != "" {
+		archive = fmt.Sprintf("%v/%v-%v-incremental-oplog.gz", tmpPath, plan.Name, ts.Unix())
 	}
 	mlog := fmt.Sprintf("%v/%v-%v.log", tmpPath, plan.Name, ts.Unix())
 	dump := fmt.Sprintf("mongodump --archive=%v --gzip ", archive)
@@ -36,7 +39,7 @@ func dump(plan config.Plan, tmpPath string, ts time.Time, lastOplogTimestamp str
 	}
 
 	if plan.Target.Oplog && lastOplogTimestamp != "" {
-		dump += `-d local -c oplog.rs " + "--query '{ "ts" : { $gt :  " + lastOplogTimestamp + " } }'`
+		dump += `-d local -c oplog.rs --query '{"ts":{"$gt":` + lastOplogTimestamp + `}}'`
 	}
 
 	if plan.Target.Oplog && lastOplogTimestamp == "" {
