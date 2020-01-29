@@ -9,5 +9,5 @@ type Result struct {
 	Size           int64         `json:"size"`
 	Status         int           `json:"status"`
 	Timestamp      time.Time     `json:"timestamp"`
-	OplogTimestamp string        `json:"oplog_timestamp"`
+	OplogTimestamp timestamp     `json:"oplog_timestamp"`
 }

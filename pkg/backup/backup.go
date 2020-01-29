@@ -43,7 +43,8 @@ func Run(plan config.Plan, tmpPath string, storagePath, oplogTimestamp string, s
 		if err != nil {
 			return res, errors.Wrapf(err, "getting current oplog timestamp from mongo")
 		}
-		res.OplogTimestamp = fmt.Sprintf("Timestamp(%d, %d)", ts.T, ts.I)
+		res.OplogTimestamp.Time = ts.T
+		res.OplogTimestamp.Order = ts.I
 	}
 
 	err = sh.Command("mkdir", "-p", planDir).Run()

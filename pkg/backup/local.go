@@ -1,8 +1,10 @@
 package backup
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"strconv"
 	"strings"
 	"time"
 
@@ -39,7 +41,12 @@ func dump(plan config.Plan, tmpPath string, ts time.Time, lastOplogTimestamp str
 	}
 
 	if plan.Target.Oplog && lastOplogTimestamp != "" {
-		dump += `-d local -c oplog.rs --query '{"ts":{"$gt":` + lastOplogTimestamp + `}}'`
+		var ts timestamp
+		if err := json.Unmarshal([]byte(lastOplogTimestamp), &ts); err != nil {
+			return "", "", fmt.Errorf("unmarshalling oplogTimestamp=%s: %w", lastOplogTimestamp, err)
+		}
+		dump += `-d local -c oplog.rs --query '{"ts":{"$gt":{"$timestamp":{"t":` + strconv.Itoa(int(ts.Time)) +
+			`,"i":` + strconv.Itoa(int(ts.Order)) + `}}}}'`
 	}
 
 	if plan.Target.Oplog && lastOplogTimestamp == "" {

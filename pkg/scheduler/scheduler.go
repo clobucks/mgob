@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -141,12 +142,16 @@ func (b backupJob) Run() {
 	b.metrics.Size.WithLabelValues(b.plan.Name, status).Set(float64(res.Size))
 	b.metrics.Latency.WithLabelValues(b.plan.Name, status).Observe(t2.Sub(t1).Seconds())
 
+	ts, err := json.Marshal(res.OplogTimestamp)
+	if err != nil {
+		log.WithFields(log.Fields{"plan": b.plan.Name, "timestamp": res.OplogTimestamp}).Errorf("marshalling timestamp %v", err)
+	}
 	s := &db.Status{
 		LastRun:            &res.Timestamp,
 		LastRunStatus:      status,
 		Plan:               b.plan.Name,
 		LastRunLog:         backupLog,
-		LastOplogTimestamp: res.OplogTimestamp,
+		LastOplogTimestamp: string(ts),
 	}
 
 	for _, e := range b.cron.Entries() {

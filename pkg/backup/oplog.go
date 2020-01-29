@@ -12,6 +12,13 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+// timestamp is a representation of a bson timestamp.
+type timestamp struct {
+	Time  uint32 `json:"time"`
+	Order uint32 `json:"order"`
+}
+
+// InitSessionProvider creates session provider that establishes connection to mongodb.
 func InitSessionProvider(user, password, host string, port int) (*mdb.SessionProvider, error) {
 	opts := options.New(
 		"mongodump",
