@@ -1,9 +1,13 @@
 package backup
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -15,15 +19,13 @@ import (
 	"github.com/stefanprodan/mgob/pkg/config"
 )
 
+const timeFormat = "2006-01-02T15-04-05"
+
 func dump(plan config.Plan, tmpPath string, ts time.Time, lastOplogTimestamp string) (string, string, error) {
-	archive := fmt.Sprintf("%v/%v-%v.gz", tmpPath, plan.Name, ts.Unix())
-	if plan.Target.Oplog && lastOplogTimestamp == "" {
-		archive = fmt.Sprintf("%v/%v-%v-initial-oplog.gz", tmpPath, plan.Name, ts.Unix())
-	}
-	if plan.Target.Oplog && lastOplogTimestamp != "" {
-		archive = fmt.Sprintf("%v/%v-%v-incremental-oplog.gz", tmpPath, plan.Name, ts.Unix())
-	}
-	mlog := fmt.Sprintf("%v/%v-%v.log", tmpPath, plan.Name, ts.Unix())
+	tsf := ts.Format(timeFormat)
+	archive := fmt.Sprintf("%v/%v-%v.gz", tmpPath, plan.Name, tsf)
+
+	mlog := fmt.Sprintf("%v/%v-%v.log", tmpPath, plan.Name, tsf)
 	dump := fmt.Sprintf("mongodump --archive=%v --gzip ", archive)
 
 	dump += fmt.Sprintf("--host %v --port %v ", plan.Target.Host, plan.Target.Port)
@@ -40,20 +42,7 @@ func dump(plan config.Plan, tmpPath string, ts time.Time, lastOplogTimestamp str
 		dump += fmt.Sprintf("--authenticationDatabase %v ", plan.Target.AuthSource)
 	}
 
-	if plan.Target.Oplog && lastOplogTimestamp != "" {
-		var ts timestamp
-		if err := json.Unmarshal([]byte(lastOplogTimestamp), &ts); err != nil {
-			return "", "", fmt.Errorf("unmarshalling oplogTimestamp=%s: %w", lastOplogTimestamp, err)
-		}
-		dump += `-d local -c oplog.rs --query '{"ts":{"$gt":{"$timestamp":{"t":` + strconv.Itoa(int(ts.Time)) +
-			`,"i":` + strconv.Itoa(int(ts.Order)) + `}}}}'`
-	}
-
-	if plan.Target.Oplog && lastOplogTimestamp == "" {
-		dump += "--oplog "
-	}
-
-	if plan.Target.Database != "" && !plan.Target.Oplog {
+	if plan.Target.Database != "" {
 		dump += fmt.Sprintf("--db %v ", plan.Target.Database)
 	}
 
@@ -72,6 +61,86 @@ func dump(plan config.Plan, tmpPath string, ts time.Time, lastOplogTimestamp str
 		return "", "", errors.Wrapf(err, "mongodump log %v", ex)
 	}
 	logToFile(mlog, output)
+
+	return archive, mlog, nil
+}
+
+func dumpOplog(plan config.Plan, tmpPath string, ts time.Time, lastOplogTimestamp string) (string, string, error) {
+	if !plan.Target.Oplog {
+		return "", "", fmt.Errorf("unexpected target setting: oplog value expected to be true")
+	}
+	tsf := ts.Format(timeFormat)
+	archive := fmt.Sprintf("%v/%v-%v-initial-oplog.gz", tmpPath, plan.Name, tsf)
+
+	initialBackup := lastOplogTimestamp == ""
+	if !initialBackup {
+		archive = fmt.Sprintf("%v/%v-%v-incremental-oplog.gz", tmpPath, plan.Name, tsf)
+	}
+
+	mlog := fmt.Sprintf("%v/%v-%v.log", tmpPath, plan.Name, tsf)
+	dump := "mongodump "
+	if initialBackup {
+		dump += fmt.Sprintf("--archive=%v --gzip ", archive)
+	}
+
+	dump += fmt.Sprintf("--host %v --port %v ", plan.Target.Host, plan.Target.Port)
+
+	if plan.Target.Username != "" {
+		dump += fmt.Sprintf("-u %v ", plan.Target.Username)
+	}
+
+	if plan.Target.Password != "" {
+		dump += fmt.Sprintf("-p %v ", plan.Target.Password)
+	}
+
+	if plan.Target.AuthSource != "" {
+		dump += fmt.Sprintf("--authenticationDatabase %v ", plan.Target.AuthSource)
+	}
+
+	if !initialBackup {
+		var ts timestamp
+		if err := json.Unmarshal([]byte(lastOplogTimestamp), &ts); err != nil {
+			return "", "", fmt.Errorf("unmarshalling oplogTimestamp=%s: %w", lastOplogTimestamp, err)
+		}
+		dump += `-d local -c oplog.rs --query '{"ts":{"$gt":{"$timestamp":{"t":` + strconv.Itoa(int(ts.Time)) +
+			`,"i":` + strconv.Itoa(int(ts.Order)) + `}}}}'`
+	}
+
+	if initialBackup {
+		dump += "--oplog "
+	} else {
+		dump += "-o - "
+	}
+
+	log.Debugf("dump cmd: %v", dump)
+	shProc := sh.Command("/bin/sh", "-c", dump).SetTimeout(time.Duration(plan.Scheduler.Timeout) * time.Minute)
+	var stdOut, stdErr bytes.Buffer
+	shProc.Stdout, shProc.Stderr = &stdOut, &stdErr
+	err := shProc.Run()
+	errBytes := stdErr.Bytes()
+	if err != nil {
+		ex := ""
+		if len(errBytes) > 0 {
+			ex = strings.Replace(string(errBytes), "\n", " ", -1)
+		}
+		return "", "", errors.Wrapf(err, "mongodump log %v", ex)
+	} else if !initialBackup {
+		var buf bytes.Buffer
+		zw := gzip.NewWriter(&buf)
+		_, err := zw.Write(stdOut.Bytes())
+		if err != nil {
+			return "", "", errors.Wrapf(err, "archiving dump")
+		}
+		ar, err := os.Create(archive)
+		if err != nil {
+			return "", "", errors.Wrapf(err, "creating archive file")
+		}
+		_, err = io.Copy(zw, ar)
+		if err != nil {
+			return "", "", errors.Wrapf(err, "writing archive content to a file")
+		}
+	}
+	logToFile(mlog, errBytes)
 
 	return archive, mlog, nil
 }

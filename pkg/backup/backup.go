@@ -19,7 +19,15 @@ func Run(plan config.Plan, tmpPath string, storagePath, oplogTimestamp string, s
 	t1 := time.Now()
 	planDir := fmt.Sprintf("%v/%v", storagePath, plan.Name)
 
-	archive, mlog, err := dump(plan, tmpPath, t1.UTC(), oplogTimestamp)
+	var (
+		archive, mlog string
+		err           error
+	)
+	if plan.Target.Oplog {
+		archive, mlog, err = dumpOplog(plan, tmpPath, t1.UTC(), oplogTimestamp)
+	} else {
+		archive, mlog, err = dump(plan, tmpPath, t1.UTC(), oplogTimestamp)
+	}
 	log.WithFields(log.Fields{
 		"archive": archive,
 		"mlog":    mlog,
