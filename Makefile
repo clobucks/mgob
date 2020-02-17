@@ -87,16 +87,17 @@ backend:
         -v /tmp/ssh_host_rsa_key:/etc/ssh/ssh_host_rsa_key \
         --name test-sftp atmoz/sftp:alpine test::1001::backup
 
-MONGO_PORT=27017
-MONGO_REPLICA_PORT=27018
+MONGO_PORT=27018
+MONGO_REPLICA_PORT=27017
 MONGO_CONTAINER=test-mongodb
 MONGO_REPLICA_CONTAINER=test-replicaset-mongodb
 
 mongo:
 	@docker network create mgob || true
+	@docker rm -f $(MONGO_CONTAINER) $(MONGO_REPLICA_CONTAINER) || true
 	@docker run -dp $(MONGO_PORT):27017 --net=mgob --name $(MONGO_CONTAINER) mongo:4.0.14
 	@sleep 3
-	@mongo test --eval 'db.test.insert({item: "item", val: "test" });'
+	@mongo --port 27018 test --eval 'db.test.insert({item: "item", val: "test" });'
 	@docker run -dp $(MONGO_REPLICA_PORT):27017 --net=mgob --name $(MONGO_REPLICA_CONTAINER) mongo:4.0.14 mongod --replSet test-set
 	@docker cp ./test/init_replica_set.js test-replicaset-mongodb:/init_replica_set.js
 	@sleep 3

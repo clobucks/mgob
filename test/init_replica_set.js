@@ -1,4 +1,5 @@
-db = (new Mongo('localhost:27017')).getDB('test');
+db = (new Mongo('127.0.0.1:27017')).getDB('test');
+
 rs.initiate({
     _id : "test-set",
     members : [
@@ -8,8 +9,8 @@ rs.initiate({
         }
     ]
 });
-
 while(!rs.isMaster().ismaster){ sleep(2000);}
+
 db.getSiblingDB("admin").createUser(
     {
         user: "test",

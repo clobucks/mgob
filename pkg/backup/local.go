@@ -1,13 +1,9 @@
 package backup
 
 import (
-	"bytes"
-	"compress/gzip"
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/ioutil"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -73,8 +69,10 @@ func dumpOplog(plan config.Plan, tmpPath string, ts time.Time, lastOplogTimestam
 	archive := fmt.Sprintf("%v/%v-%v-initial-oplog.gz", tmpPath, plan.Name, tsf)
 
 	initialBackup := lastOplogTimestamp == ""
+	var dirToArchive string
 	if !initialBackup {
-		archive = fmt.Sprintf("%v/%v-%v-incremental-oplog.gz", tmpPath, plan.Name, tsf)
+		dirToArchive = fmt.Sprintf("%v/%v-%v-incremental-oplog", tmpPath, plan.Name, tsf)
+		archive = fmt.Sprintf("%v/%v-%v-incremental-oplog.tar.gz", tmpPath, plan.Name, tsf)
 	}
 
 	mlog := fmt.Sprintf("%v/%v-%v.log", tmpPath, plan.Name, tsf)
@@ -97,50 +95,28 @@ func dumpOplog(plan config.Plan, tmpPath string, ts time.Time, lastOplogTimestam
 		dump += fmt.Sprintf("--authenticationDatabase %v ", plan.Target.AuthSource)
 	}
 
-	if !initialBackup {
+	if initialBackup {
+		dump += "--oplog "
+	} else {
 		var ts timestamp
 		if err := json.Unmarshal([]byte(lastOplogTimestamp), &ts); err != nil {
 			return "", "", fmt.Errorf("unmarshalling oplogTimestamp=%s: %w", lastOplogTimestamp, err)
 		}
 		dump += `-d local -c oplog.rs --query '{"ts":{"$gt":{"$timestamp":{"t":` + strconv.Itoa(int(ts.Time)) +
-			`,"i":` + strconv.Itoa(int(ts.Order)) + `}}}}'`
-	}
-
-	if initialBackup {
-		dump += "--oplog "
-	} else {
-		dump += "-o - "
+			`,"i":` + strconv.Itoa(int(ts.Order)) + `}}}}' -o ` + dirToArchive + ` && tar -zcvf ` + archive + ` ` + dirToArchive
 	}
 
 	log.Debugf("dump cmd: %v", dump)
-	shProc := sh.Command("/bin/sh", "-c", dump).SetTimeout(time.Duration(plan.Scheduler.Timeout) * time.Minute)
-	var stdOut, stdErr bytes.Buffer
-	shProc.Stdout, shProc.Stderr = &stdOut, &stdErr
-	err := shProc.Run()
-	errBytes := stdErr.Bytes()
+	output, err := sh.Command("/bin/sh", "-c", dump).SetTimeout(time.Duration(plan.Scheduler.Timeout) * time.Minute).CombinedOutput()
 	if err != nil {
 		ex := ""
-		if len(errBytes) > 0 {
-			ex = strings.Replace(string(errBytes), "\n", " ", -1)
+		if len(output) > 0 {
+			ex = strings.Replace(string(output), "\n", " ", -1)
 		}
 		return "", "", errors.Wrapf(err, "mongodump log %v", ex)
-	} else if !initialBackup {
-		var buf bytes.Buffer
-		zw := gzip.NewWriter(&buf)
-		_, err := zw.Write(stdOut.Bytes())
-		if err != nil {
-			return "", "", errors.Wrapf(err, "archiving dump")
-		}
-		ar, err := os.Create(archive)
-		if err != nil {
-			return "", "", errors.Wrapf(err, "creating archive file")
-		}
-		_, err = io.Copy(zw, ar)
-		if err != nil {
-			return "", "", errors.Wrapf(err, "writing archive content to a file")
-		}
 	}
-	logToFile(mlog, errBytes)
+
+	logToFile(mlog, output)
 
 	return archive, mlog, nil
 }
